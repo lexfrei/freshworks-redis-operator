@@ -593,6 +593,11 @@ func (in *CertManagerSettings) DeepCopyInto(out *CertManagerSettings) {
 		*out = new(cmapi.CertificatePrivateKey)
 		**out = **in
 	}
+	if in.ExtraSANs != nil {
+		in, out := &in.ExtraSANs, &out.ExtraSANs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
