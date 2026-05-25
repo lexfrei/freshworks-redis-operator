@@ -196,17 +196,17 @@ func (_m *Client) MakeSlaveOf(ip string, masterIP string, password string, tlsCo
 	return r0
 }
 
-// MakeSlaveOfWithPort provides a mock function with given fields: ip, masterIP, masterPort, password, tlsConfig
-func (_m *Client) MakeSlaveOfWithPort(ip string, masterIP string, masterPort string, password string, tlsConfig *tls.Config) error {
-	ret := _m.Called(ip, masterIP, masterPort, password, tlsConfig)
+// MakeSlaveOfWithPort provides a mock function with given fields: ip, localPort, masterIP, masterPort, password, tlsConfig
+func (_m *Client) MakeSlaveOfWithPort(ip string, localPort string, masterIP string, masterPort string, password string, tlsConfig *tls.Config) error {
+	ret := _m.Called(ip, localPort, masterIP, masterPort, password, tlsConfig)
 
 	if len(ret) == 0 {
 		panic("no return value specified for MakeSlaveOfWithPort")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, string, string, *tls.Config) error); ok {
-		r0 = rf(ip, masterIP, masterPort, password, tlsConfig)
+	if rf, ok := ret.Get(0).(func(string, string, string, string, string, *tls.Config) error); ok {
+		r0 = rf(ip, localPort, masterIP, masterPort, password, tlsConfig)
 	} else {
 		r0 = ret.Error(0)
 	}
