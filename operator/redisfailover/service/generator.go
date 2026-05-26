@@ -105,17 +105,19 @@ func redisCLITLSFlags(rf *redisfailoverv1.RedisFailover) string {
 //     redis slave, sentinel) in short, namespaced and FQDN form
 //   - the per-pod DNS records of the redis headless service so the
 //     operator can dial pods by stable name with TLS verification on
+//   - localhost (DNS) and 127.0.0.1 / ::1 (IP) so the in-pod TLS
+//     dials performed by liveness probes, the redis_exporter sidecar
+//     and the sentinel monitor target verify cleanly
 //
-// IP SANs are deliberately omitted: pod IPs are unstable, and the
-// operator uses ServerName override in tls.Config to validate
-// pod-IP-targeted dials against the headless DNS SAN instead.
+// Pod IPs are still not added: they are unstable, and the operator
+// uses ServerName override in tls.Config to validate pod-IP-targeted
+// dials against the headless DNS SAN instead.
 func generateRedisCertificate(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) *cmapi.Certificate {
 	name := GetTLSCertificateName(rf)
 	secretName := GetTLSSecretName(rf)
 	cm := rf.Spec.TLS.CertManager
 
-	dnsNames := redisCertificateDNSNames(rf)
-	var ipAddresses []string
+	dnsNames, ipAddresses := redisCertificateSANs(rf)
 	for _, san := range cm.ExtraSANs {
 		if ip := net.ParseIP(san); ip != nil {
 			ipAddresses = append(ipAddresses, ip.String())
@@ -176,12 +178,15 @@ func generateRedisCACertSecret(rf *redisfailoverv1.RedisFailover, labels map[str
 	}
 }
 
-// redisCertificateDNSNames returns the SANs the Certificate must cover.
-// Each Service appears in three forms (short, namespaced, FQDN) so
-// the same certificate validates regardless of how callers resolve it.
-func redisCertificateDNSNames(rf *redisfailoverv1.RedisFailover) []string {
+// redisCertificateSANs returns the DNS and IP SANs the Certificate
+// must cover. Each Service appears in three forms (short, namespaced,
+// FQDN) so the same certificate validates regardless of how callers
+// resolve it. localhost and the loopback IPs are included so the
+// in-pod self-dials (liveness probes via -h localhost, the
+// redis_exporter sidecar via 127.0.0.1, the sentinel monitor target
+// 127.0.0.1) verify cleanly against the same cert.
+func redisCertificateSANs(rf *redisfailoverv1.RedisFailover) (dnsNames, ipAddresses []string) {
 	ns := rf.Namespace
-	names := []string{}
 
 	for _, svc := range []string{
 		GetRedisName(rf),
@@ -189,7 +194,7 @@ func redisCertificateDNSNames(rf *redisfailoverv1.RedisFailover) []string {
 		GetRedisSlaveName(rf),
 		GetSentinelName(rf),
 	} {
-		names = append(names,
+		dnsNames = append(dnsNames,
 			svc,
 			fmt.Sprintf("%s.%s", svc, ns),
 			fmt.Sprintf("%s.%s.svc", svc, ns),
@@ -201,13 +206,16 @@ func redisCertificateDNSNames(rf *redisfailoverv1.RedisFailover) []string {
 	// We don't know pod count up front; cover the wildcard so any
 	// replica resolves correctly.
 	headless := GetRedisName(rf)
-	names = append(names,
+	dnsNames = append(dnsNames,
 		fmt.Sprintf("*.%s", headless),
 		fmt.Sprintf("*.%s.%s", headless, ns),
 		fmt.Sprintf("*.%s.%s.svc", headless, ns),
 		fmt.Sprintf("*.%s.%s.svc.cluster.local", headless, ns),
+		"localhost",
 	)
-	return names
+
+	ipAddresses = []string{"127.0.0.1", "::1"}
+	return dnsNames, ipAddresses
 }
 
 func generateSentinelService(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) *corev1.Service {
@@ -623,7 +631,7 @@ func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[stri
 					Command: []string{
 						"sh",
 						"-c",
-						fmt.Sprintf("%s %s-h $(hostname) -p %v --user pinger --pass pingpass --no-auth-warning ping | grep PONG", eng.CLIBinary(), redisCLITLSFlags(rf), rf.Spec.Redis.Port),
+						fmt.Sprintf("%s %s-h localhost -p %v --user pinger --pass pingpass --no-auth-warning ping | grep PONG", eng.CLIBinary(), redisCLITLSFlags(rf), rf.Spec.Redis.Port),
 					},
 				},
 			},
@@ -790,7 +798,7 @@ func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[st
 					Command: []string{
 						"sh",
 						"-c",
-						fmt.Sprintf("%s %s-h $(hostname) -p 26379 ping", eng.CLIBinary(), redisCLITLSFlags(rf)),
+						fmt.Sprintf("%s %s-h localhost -p 26379 ping", eng.CLIBinary(), redisCLITLSFlags(rf)),
 					},
 				},
 			},
@@ -800,7 +808,7 @@ func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[st
 	if rf.Spec.Sentinel.CustomReadinessProbe != nil {
 		sd.Spec.Template.Spec.Containers[0].ReadinessProbe = rf.Spec.Sentinel.CustomReadinessProbe
 	} else {
-		probeCommand := fmt.Sprintf("%s %s-h $(hostname) -p 26379 sentinel get-master-addr-by-name %s | head -n 1 | grep -vq '127.0.0.1'", eng.CLIBinary(), redisCLITLSFlags(rf), rf.MasterName())
+		probeCommand := fmt.Sprintf("%s %s-h localhost -p 26379 sentinel get-master-addr-by-name %s | head -n 1 | grep -vq '127.0.0.1'", eng.CLIBinary(), redisCLITLSFlags(rf), rf.MasterName())
 		sd.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
 			InitialDelaySeconds: graceTime,
 			TimeoutSeconds:      5,
