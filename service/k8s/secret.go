@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/freshworks/redis-operator/log"
 	"github.com/freshworks/redis-operator/metrics"
@@ -75,6 +76,16 @@ func (s *SecretService) CreateOrUpdateSecret(namespace string, secret *corev1.Se
 			return s.CreateSecret(namespace, secret)
 		}
 		return err
+	}
+
+	// Skip the write when the desired content already matches what is stored.
+	// The operator does not watch Secrets, so an unconditional update would not
+	// loop, but it would still issue a redundant API write (bumping
+	// resourceVersion) on every reconcile of the owning resource. Comparing the
+	// managed content keeps the published Secret quiet between actual changes
+	// (e.g. CA rotation).
+	if storedSecret.Type == secret.Type && reflect.DeepEqual(storedSecret.Data, secret.Data) {
+		return nil
 	}
 
 	// Already exists, need to Update.
