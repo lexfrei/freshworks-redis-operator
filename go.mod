@@ -1,6 +1,6 @@
 module github.com/freshworks/redis-operator
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
