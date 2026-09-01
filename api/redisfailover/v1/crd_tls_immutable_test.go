@@ -3,7 +3,9 @@ package v1
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,6 +34,27 @@ const (
 )
 
 const tlsImmutableMessage = "TLS cannot be enabled or disabled on an existing RedisFailover; create a new one"
+
+// requireGeneratedCRDs skips when the tree carries none of the generated CRD
+// copies. Consumers that vendor this operator as a source-only patch take the
+// Go tree and drop manifests/ and charts/, so the files these tests read are
+// not there at all and `go test ./...` would fail for want of a fixture rather
+// than for anything about the operator. A tree holding some of the copies but
+// not the others is a different matter: they are written together and are
+// expected to travel together, so a partial set stays a failure.
+func requireGeneratedCRDs(t *testing.T) {
+	t.Helper()
+	var missing []string
+	for _, path := range generatedCRDPaths {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) == len(generatedCRDPaths) {
+		t.Skipf("no generated CRD in this tree (absent: %s); nothing to validate when the operator is vendored as source only",
+			strings.Join(missing, ", "))
+	}
+}
 
 // generatedCRDValidator compiles the x-kubernetes-validations of the
 // committed CRD, so the assertions below run against the schema the
@@ -126,6 +149,7 @@ func assertTLSImmutableError(t *testing.T, errs field.ErrorList) {
 }
 
 func TestGeneratedCRDRejectsTurningTLSOnOrOff(t *testing.T) {
+	requireGeneratedCRDs(t)
 	validator := generatedCRDValidator(t)
 
 	t.Run("create with tls is accepted", func(t *testing.T) {
@@ -170,6 +194,7 @@ func TestGeneratedCRDRejectsTurningTLSOnOrOff(t *testing.T) {
 // The generator writes one file and the other two are copies; a copy that
 // falls behind ships a different schema to chart and kustomize users.
 func TestGeneratedCRDCopiesAreIdentical(t *testing.T) {
+	requireGeneratedCRDs(t)
 	reference, err := os.ReadFile(generatedCRDPaths[0])
 	if err != nil {
 		t.Fatalf("reading %s: %v", generatedCRDPaths[0], err)
