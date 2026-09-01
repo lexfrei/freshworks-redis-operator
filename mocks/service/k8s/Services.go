@@ -1321,20 +1321,6 @@ func (_m *Services) UpdateCertificate(namespace string, cert *cmapi.Certificate)
 	return r0
 }
 
-// DeleteCertificate provides a mock function with given fields: namespace, name
-func (_m *Services) DeleteCertificate(namespace string, name string) error {
-	ret := _m.Called(namespace, name)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string) error); ok {
-		r0 = rf(namespace, name)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // GetCertificate provides a mock function with given fields: namespace, name
 func (_m *Services) GetCertificate(namespace string, name string) (*cmapi.Certificate, error) {
 	ret := _m.Called(namespace, name)

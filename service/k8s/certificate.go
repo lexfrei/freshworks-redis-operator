@@ -22,7 +22,6 @@ type Certificate interface {
 	CreateCertificate(namespace string, cert *cmapi.Certificate) error
 	UpdateCertificate(namespace string, cert *cmapi.Certificate) error
 	CreateOrUpdateCertificate(namespace string, cert *cmapi.Certificate) error
-	DeleteCertificate(namespace string, name string) error
 }
 
 // CertificateService talks to the cert-manager API.
@@ -81,10 +80,4 @@ func (c *CertificateService) CreateOrUpdateCertificate(namespace string, cert *c
 	}
 	cert.ResourceVersion = stored.ResourceVersion
 	return c.UpdateCertificate(namespace, cert)
-}
-
-func (c *CertificateService) DeleteCertificate(namespace string, name string) error {
-	err := c.cmClient.CertmanagerV1().Certificates(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-	recordMetrics(namespace, "Certificate", name, "DELETE", err, c.metricsRecorder)
-	return err
 }
