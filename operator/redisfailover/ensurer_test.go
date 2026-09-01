@@ -172,3 +172,46 @@ func TestEnsurePropagatesTLSHashToPodTemplates(t *testing.T) {
 	assert.NoError(err)
 	mrfs.AssertExpectations(t)
 }
+
+// On a first install with TLS on, cert-manager writes the Secret after the
+// RedisFailover is created. Writing the pod-facing objects before it exists
+// leaves the pods on a missing volume and, once the Secret appears and its
+// hash lands on the templates, rolls them a second time. They wait instead.
+func TestEnsureWaitsForTLSMaterialBeforeWritingPodFacingObjects(t *testing.T) {
+	assert := assert.New(t)
+
+	rf := generateRF(false, false, false)
+	rf.Spec.TLS = &redisfailoverv1.TLSSettings{
+		Enabled:           true,
+		CertificateSecret: &redisfailoverv1.LocalSecretReference{SecretName: "test-tls"},
+	}
+	config := generateConfig()
+	mk := &mK8SService.Services{}
+	mrfc := &mRFService.RedisFailoverCheck{}
+	mrfh := &mRFService.RedisFailoverHeal{}
+	mrfs := &mRFService.RedisFailoverClient{}
+
+	mrfs.On("EnsureNotPresentRedisService", rf).Once().Return(nil)
+	mrfs.On("EnsureSentinelService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisMasterService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisSlaveService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisCertificate", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisCACertSecret", rf, mock.Anything, mock.Anything).Once().Return("", nil)
+	podFacing := []string{"EnsureSentinelConfigMap", "EnsureRedisShutdownConfigMap", "EnsureRedisReadinessConfigMap", "EnsureRedisConfigMap"}
+	for _, method := range podFacing {
+		mrfs.On(method, rf, mock.Anything, mock.Anything).Return(nil).Maybe()
+	}
+	mrfs.On("EnsureRedisStatefulset", rf, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+	mrfs.On("EnsureSentinelDeployment", rf, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	handler := rfOperator.NewRedisFailoverHandler(config, mrfs, mrfc, mrfh, mk, metrics.Dummy, log.Dummy)
+	err := handler.Ensure(rf, map[string]string{}, []metav1.OwnerReference{}, metrics.Dummy)
+
+	assert.NoError(err)
+	mrfs.AssertExpectations(t)
+	for _, method := range podFacing {
+		mrfs.AssertNotCalled(t, method, rf, mock.Anything, mock.Anything)
+	}
+	mrfs.AssertNotCalled(t, "EnsureRedisStatefulset", rf, mock.Anything, mock.Anything, mock.Anything)
+	mrfs.AssertNotCalled(t, "EnsureSentinelDeployment", rf, mock.Anything, mock.Anything, mock.Anything)
+}

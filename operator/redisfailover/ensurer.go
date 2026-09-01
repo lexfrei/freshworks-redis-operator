@@ -5,6 +5,7 @@ import (
 
 	redisfailoverv1 "github.com/freshworks/redis-operator/api/redisfailover/v1"
 	"github.com/freshworks/redis-operator/metrics"
+	rfservice "github.com/freshworks/redis-operator/operator/redisfailover/service"
 )
 
 // Ensure is called to ensure all of the resources associated with a RedisFailover are created
@@ -22,9 +23,6 @@ func (w *RedisFailoverHandler) Ensure(rf *redisfailoverv1.RedisFailover, labels 
 	sentinelsAllowed := rf.SentinelsAllowed()
 	if sentinelsAllowed {
 		if err := w.rfService.EnsureSentinelService(rf, labels, or); err != nil {
-			return err
-		}
-		if err := w.rfService.EnsureSentinelConfigMap(rf, labels, or); err != nil {
 			return err
 		}
 	}
@@ -55,6 +53,23 @@ func (w *RedisFailoverHandler) Ensure(rf *redisfailoverv1.RedisFailover, labels 
 		return err
 	}
 
+	// Everything from here on shapes the pods: the ConfigMaps they read at
+	// startup and the templates they are created from. With TLS on and no
+	// certificate in the Secret yet there is nothing to pin them to, the
+	// pods could not start against the missing volume anyway, and writing
+	// them now would roll them again as soon as the hash appears on the
+	// next pass. Wait for the material; the objects written above do not
+	// depend on it.
+	if rfservice.TLSEnabled(rf) && tlsHash == "" {
+		w.logger.WithField("redisfailover", rf.ObjectMeta.Name).WithField("namespace", rf.ObjectMeta.Namespace).Infof("TLS secret %s has no certificate yet, waiting before writing the redis and sentinel config and workloads", rfservice.GetTLSSecretName(rf))
+		return nil
+	}
+
+	if sentinelsAllowed {
+		if err := w.rfService.EnsureSentinelConfigMap(rf, labels, or); err != nil {
+			return err
+		}
+	}
 	if err := w.rfService.EnsureRedisShutdownConfigMap(rf, labels, or); err != nil {
 		return err
 	}
