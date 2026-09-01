@@ -48,7 +48,10 @@ func (w *RedisFailoverHandler) Ensure(rf *redisfailoverv1.RedisFailover, labels 
 	// the TLS Secret so clients can verify the server under tightly scoped
 	// RBAC. No-op when TLS is disabled; defers gracefully until the TLS
 	// Secret's ca.crt is available.
-	if err := w.rfService.EnsureRedisCACertSecret(rf, labels, or); err != nil {
+	// The hash it returns pins the pod templates to the TLS material that
+	// was read here, so a renewed certificate rolls Redis and Sentinel.
+	tlsHash, err := w.rfService.EnsureRedisCACertSecret(rf, labels, or)
+	if err != nil {
 		return err
 	}
 
@@ -61,12 +64,12 @@ func (w *RedisFailoverHandler) Ensure(rf *redisfailoverv1.RedisFailover, labels 
 	if err := w.rfService.EnsureRedisConfigMap(rf, labels, or); err != nil {
 		return err
 	}
-	if err := w.rfService.EnsureRedisStatefulset(rf, labels, or); err != nil {
+	if err := w.rfService.EnsureRedisStatefulset(rf, labels, or, tlsHash); err != nil {
 		return err
 	}
 
 	if sentinelsAllowed {
-		if err := w.rfService.EnsureSentinelDeployment(rf, labels, or); err != nil {
+		if err := w.rfService.EnsureSentinelDeployment(rf, labels, or, tlsHash); err != nil {
 			return err
 		}
 	}

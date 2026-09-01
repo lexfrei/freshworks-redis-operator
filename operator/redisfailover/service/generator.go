@@ -2,8 +2,11 @@ package service
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -176,6 +179,39 @@ func generateRedisCACertSecret(rf *redisfailoverv1.RedisFailover, labels map[str
 			tlsSecretCAKey: caPEM,
 		},
 	}
+}
+
+// tlsSecretContentHash returns a content hash of the TLS material the pods
+// mount, or the empty string when there is no certificate to pin yet.
+//
+// Both tls.crt and ca.crt are covered. Redis loads the certificate and the CA
+// bundle at startup and re-reads neither, so a change to either one only
+// reaches the server by restarting the pod. tls.key is left out: cert-manager
+// rotates it together with tls.crt, and there is no reason to derive a
+// published annotation value from private key material.
+func tlsSecretContentHash(secret *corev1.Secret) string {
+	if secret == nil || len(secret.Data[tlsSecretKey]) == 0 {
+		return ""
+	}
+	h := sha256.New()
+	for _, key := range []string{tlsSecretKey, tlsSecretCAKey} {
+		value := secret.Data[key]
+		// Length-prefixed so that two different splits of the same
+		// concatenated bytes cannot hash alike.
+		h.Write([]byte(key + ":" + strconv.Itoa(len(value)) + ":"))
+		h.Write(value)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// podAnnotations returns the pod template annotations with the TLS content
+// hash stamped on top. The caller's map is left untouched, since it is the
+// live spec map from the RedisFailover.
+func podAnnotations(specAnnotations map[string]string, tlsHash string) map[string]string {
+	if tlsHash == "" {
+		return specAnnotations
+	}
+	return util.MergeAnnotations(specAnnotations, map[string]string{tlsSecretHashAnnotation: tlsHash})
 }
 
 // redisCertificateSANs returns the DNS and IP SANs the Certificate
@@ -522,7 +558,7 @@ esac`, port, cli, authEnv, tlsFlags)
 	}
 }
 
-func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) *appsv1.StatefulSet {
+func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference, tlsHash string) *appsv1.StatefulSet {
 	name := GetRedisName(rf)
 	namespace := rf.Namespace
 
@@ -557,7 +593,7 @@ func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[stri
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: rf.Spec.Redis.PodAnnotations,
+					Annotations: podAnnotations(rf.Spec.Redis.PodAnnotations, tlsHash),
 				},
 				Spec: corev1.PodSpec{
 					Affinity:                      getAffinity(rf.Spec.Redis.Affinity, labels),
@@ -697,7 +733,7 @@ func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[stri
 	return ss
 }
 
-func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) *appsv1.Deployment {
+func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference, tlsHash string) *appsv1.Deployment {
 	name := GetSentinelName(rf)
 	configMapName := GetSentinelName(rf)
 	namespace := rf.Namespace
@@ -725,7 +761,7 @@ func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[st
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:      labels,
-					Annotations: rf.Spec.Sentinel.PodAnnotations,
+					Annotations: podAnnotations(rf.Spec.Sentinel.PodAnnotations, tlsHash),
 				},
 				Spec: corev1.PodSpec{
 					Affinity:                  getAffinity(rf.Spec.Sentinel.Affinity, labels),

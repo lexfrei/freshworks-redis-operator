@@ -115,17 +115,17 @@ func TestEnsure(t *testing.T) {
 			if !test.bootstrapping || test.bootstrappingAllowSentinels {
 				mrfs.On("EnsureSentinelService", rf, mock.Anything, mock.Anything).Once().Return(nil)
 				mrfs.On("EnsureSentinelConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
-				mrfs.On("EnsureSentinelDeployment", rf, mock.Anything, mock.Anything).Once().Return(nil)
+				mrfs.On("EnsureSentinelDeployment", rf, mock.Anything, mock.Anything, mock.Anything).Once().Return(nil)
 			}
 
 			mrfs.On("EnsureRedisMasterService", rf, mock.Anything, mock.Anything).Once().Return(nil)
 			mrfs.On("EnsureRedisSlaveService", rf, mock.Anything, mock.Anything).Once().Return(nil)
 			mrfs.On("EnsureRedisCertificate", rf, mock.Anything, mock.Anything).Once().Return(nil)
-			mrfs.On("EnsureRedisCACertSecret", rf, mock.Anything, mock.Anything).Once().Return(nil)
+			mrfs.On("EnsureRedisCACertSecret", rf, mock.Anything, mock.Anything).Once().Return("", nil)
 			mrfs.On("EnsureRedisConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
 			mrfs.On("EnsureRedisShutdownConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
 			mrfs.On("EnsureRedisReadinessConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
-			mrfs.On("EnsureRedisStatefulset", rf, mock.Anything, mock.Anything).Once().Return(nil)
+			mrfs.On("EnsureRedisStatefulset", rf, mock.Anything, mock.Anything, mock.Anything).Once().Return(nil)
 
 			// Create the Kops client and call the valid logic.
 			handler := rfOperator.NewRedisFailoverHandler(config, mrfs, mrfc, mrfh, mk, metrics.Dummy, log.Dummy)
@@ -135,4 +135,40 @@ func TestEnsure(t *testing.T) {
 			mrfs.AssertExpectations(t)
 		})
 	}
+}
+
+// The TLS Secret is read once per reconcile, by the CA-publish step. The hash
+// it returns has to reach both pod templates, or a renewed certificate never
+// rolls the pods.
+func TestEnsurePropagatesTLSHashToPodTemplates(t *testing.T) {
+	assert := assert.New(t)
+
+	const tlsHash = "0d9f1c2b3a"
+
+	rf := generateRF(false, false, false)
+	config := generateConfig()
+	mk := &mK8SService.Services{}
+	mrfc := &mRFService.RedisFailoverCheck{}
+	mrfh := &mRFService.RedisFailoverHeal{}
+	mrfs := &mRFService.RedisFailoverClient{}
+
+	mrfs.On("EnsureNotPresentRedisService", rf).Once().Return(nil)
+	mrfs.On("EnsureSentinelService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureSentinelConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisMasterService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisSlaveService", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisCertificate", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisShutdownConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
+	mrfs.On("EnsureRedisReadinessConfigMap", rf, mock.Anything, mock.Anything).Once().Return(nil)
+
+	mrfs.On("EnsureRedisCACertSecret", rf, mock.Anything, mock.Anything).Once().Return(tlsHash, nil)
+	mrfs.On("EnsureRedisStatefulset", rf, mock.Anything, mock.Anything, tlsHash).Once().Return(nil)
+	mrfs.On("EnsureSentinelDeployment", rf, mock.Anything, mock.Anything, tlsHash).Once().Return(nil)
+
+	handler := rfOperator.NewRedisFailoverHandler(config, mrfs, mrfc, mrfh, mk, metrics.Dummy, log.Dummy)
+	err := handler.Ensure(rf, map[string]string{}, []metav1.OwnerReference{}, metrics.Dummy)
+
+	assert.NoError(err)
+	mrfs.AssertExpectations(t)
 }

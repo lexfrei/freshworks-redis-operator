@@ -69,17 +69,26 @@ func (_m *RedisFailoverClient) EnsureRedisMasterService(rFailover *v1.RedisFailo
 }
 
 // EnsureRedisCACertSecret provides a mock function with given fields: rFailover, labels, ownerRefs
-func (_m *RedisFailoverClient) EnsureRedisCACertSecret(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) error {
+func (_m *RedisFailoverClient) EnsureRedisCACertSecret(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) (string, error) {
 	ret := _m.Called(rFailover, labels, ownerRefs)
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) error); ok {
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) (string, error)); ok {
+		return rf(rFailover, labels, ownerRefs)
+	}
+	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) string); ok {
 		r0 = rf(rFailover, labels, ownerRefs)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(string)
+	}
+	if rf, ok := ret.Get(1).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) error); ok {
+		r1 = rf(rFailover, labels, ownerRefs)
+	} else {
+		r1 = ret.Error(1)
 	}
 
-	return r0
+	return r0, r1
 }
 
 // EnsureRedisReadinessConfigMap provides a mock function with given fields: rFailover, labels, ownerRefs
@@ -154,17 +163,17 @@ func (_m *RedisFailoverClient) EnsureRedisSlaveService(rFailover *v1.RedisFailov
 	return r0
 }
 
-// EnsureRedisStatefulset provides a mock function with given fields: rFailover, labels, ownerRefs
-func (_m *RedisFailoverClient) EnsureRedisStatefulset(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) error {
-	ret := _m.Called(rFailover, labels, ownerRefs)
+// EnsureRedisStatefulset provides a mock function with given fields: rFailover, labels, ownerRefs, tlsHash
+func (_m *RedisFailoverClient) EnsureRedisStatefulset(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference, tlsHash string) error {
+	ret := _m.Called(rFailover, labels, ownerRefs, tlsHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for EnsureRedisStatefulset")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) error); ok {
-		r0 = rf(rFailover, labels, ownerRefs)
+	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference, string) error); ok {
+		r0 = rf(rFailover, labels, ownerRefs, tlsHash)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -190,17 +199,17 @@ func (_m *RedisFailoverClient) EnsureSentinelConfigMap(rFailover *v1.RedisFailov
 	return r0
 }
 
-// EnsureSentinelDeployment provides a mock function with given fields: rFailover, labels, ownerRefs
-func (_m *RedisFailoverClient) EnsureSentinelDeployment(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) error {
-	ret := _m.Called(rFailover, labels, ownerRefs)
+// EnsureSentinelDeployment provides a mock function with given fields: rFailover, labels, ownerRefs, tlsHash
+func (_m *RedisFailoverClient) EnsureSentinelDeployment(rFailover *v1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference, tlsHash string) error {
+	ret := _m.Called(rFailover, labels, ownerRefs, tlsHash)
 
 	if len(ret) == 0 {
 		panic("no return value specified for EnsureSentinelDeployment")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference) error); ok {
-		r0 = rf(rFailover, labels, ownerRefs)
+	if rf, ok := ret.Get(0).(func(*v1.RedisFailover, map[string]string, []metav1.OwnerReference, string) error); ok {
+		r0 = rf(rFailover, labels, ownerRefs, tlsHash)
 	} else {
 		r0 = ret.Error(0)
 	}

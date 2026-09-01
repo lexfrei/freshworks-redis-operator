@@ -116,7 +116,7 @@ func TestRedisStatefulSetHasTLSVolume(t *testing.T) {
 	a := assert.New(t)
 	rf := generateTLSRF()
 
-	got := redisStatefulSetFor(t, rf)
+	got := redisStatefulSetFor(t, rf, "")
 	if !a.NotNil(got) {
 		return
 	}
@@ -145,7 +145,7 @@ func TestSentinelDeploymentHasTLSVolume(t *testing.T) {
 	a := assert.New(t)
 	rf := generateTLSRF()
 
-	got := sentinelDeploymentFor(t, rf)
+	got := sentinelDeploymentFor(t, rf, "")
 	if !a.NotNil(got) {
 		return
 	}
@@ -180,7 +180,7 @@ func TestTLSVolumeKeepsDefaultModeWithoutFSGroup(t *testing.T) {
 	rf.Spec.Redis.SecurityContext = noFSGroup
 	rf.Spec.Sentinel.SecurityContext = noFSGroup
 
-	sts := redisStatefulSetFor(t, rf)
+	sts := redisStatefulSetFor(t, rf, "")
 	if a.NotNil(sts) {
 		tlsVol := findVolume(sts.Spec.Template.Spec.Volumes, "redis-tls")
 		if a.NotNil(tlsVol) && a.NotNil(tlsVol.Secret) {
@@ -189,7 +189,7 @@ func TestTLSVolumeKeepsDefaultModeWithoutFSGroup(t *testing.T) {
 		}
 	}
 
-	deploy := sentinelDeploymentFor(t, rf)
+	deploy := sentinelDeploymentFor(t, rf, "")
 	if a.NotNil(deploy) {
 		tlsVol := findVolume(deploy.Spec.Template.Spec.Volumes, "redis-tls")
 		if a.NotNil(tlsVol) && a.NotNil(tlsVol.Secret) {
@@ -217,7 +217,7 @@ func hasTLSMount(mounts []corev1.VolumeMount) bool {
 	return false
 }
 
-func redisStatefulSetFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *appsv1.StatefulSet {
+func redisStatefulSetFor(t *testing.T, rf *redisfailoverv1.RedisFailover, tlsHash string) *appsv1.StatefulSet {
 	t.Helper()
 
 	var got *appsv1.StatefulSet
@@ -230,11 +230,11 @@ func redisStatefulSetFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *appsv
 	ms.On("GetStatefulSet", rf.Namespace, mock.Anything).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "")).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil, tlsHash))
 	return got
 }
 
-func sentinelDeploymentFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *appsv1.Deployment {
+func sentinelDeploymentFor(t *testing.T, rf *redisfailoverv1.RedisFailover, tlsHash string) *appsv1.Deployment {
 	t.Helper()
 
 	var got *appsv1.Deployment
@@ -246,7 +246,7 @@ func sentinelDeploymentFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *app
 	ms.On("CreateOrUpdatePodDisruptionBudget", rf.Namespace, mock.Anything).Return(nil).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil, tlsHash))
 	return got
 }
 
@@ -264,7 +264,7 @@ func TestRedisExporterHasTLSEnv(t *testing.T) {
 	ms.On("GetStatefulSet", rf.Namespace, mock.Anything).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "")).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil, ""))
 
 	if !a.NotNil(got) {
 		return
@@ -301,7 +301,7 @@ func TestSentinelExporterTLSAddr(t *testing.T) {
 	ms.On("GetStatefulSet", rf.Namespace, mock.Anything).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "")).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil, ""))
 
 	if !a.NotNil(got) {
 		return
@@ -388,7 +388,7 @@ func TestRedisLivenessProbeUsesTLS(t *testing.T) {
 	ms.On("GetStatefulSet", rf.Namespace, mock.Anything).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "")).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil, ""))
 
 	if !a.NotNil(got) {
 		return
@@ -420,7 +420,7 @@ func TestSentinelProbeUsesTLS(t *testing.T) {
 	ms.On("GetStatefulSet", rf.Namespace, mock.Anything).Return(nil, apierrors.NewNotFound(schema.GroupResource{}, "")).Maybe()
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil))
+	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil, ""))
 
 	if !a.NotNil(got) {
 		return
@@ -770,7 +770,8 @@ func TestEnsureRedisCACertSecretPublishesCAOnly(t *testing.T) {
 	})).Return(nil)
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	ensureSucceeded(t, err)
 	ms.AssertExpectations(t)
 
 	if !a.NotNil(got) {
@@ -801,7 +802,8 @@ func TestEnsureRedisCACertSecretDefersWhenTLSSecretMissing(t *testing.T) {
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
 	// Not-yet-populated TLS secret (cert-manager is asynchronous) must be a
 	// soft skip, not an error that blocks the rest of the reconcile.
-	a.NoError(gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	a.NoError(err)
 	ms.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything)
 	ms.AssertExpectations(t)
 }
@@ -816,7 +818,8 @@ func TestEnsureRedisCACertSecretReturnsErrorOnGetFailure(t *testing.T) {
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
 	// A non-NotFound error is a real failure and must propagate.
-	a.Error(gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	a.Error(err)
 	ms.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything)
 	ms.AssertExpectations(t)
 }
@@ -839,7 +842,8 @@ func TestEnsureRedisCACertSecretDefersWhenCACrtMissing(t *testing.T) {
 	ms.On("GetSecret", rf.Namespace, srcName).Return(leaf, nil)
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	a.NoError(gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	a.NoError(err)
 	ms.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything)
 	ms.AssertExpectations(t)
 }
@@ -851,7 +855,8 @@ func TestEnsureRedisCACertSecretSkipsWhenDisabled(t *testing.T) {
 	ms := &mK8SService.Services{}
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
 
-	a.NoError(gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	a.NoError(err)
 	ms.AssertNotCalled(t, "GetSecret", mock.Anything, mock.Anything)
 	ms.AssertNotCalled(t, "CreateOrUpdateSecret", mock.Anything, mock.Anything)
 }
@@ -878,7 +883,8 @@ func TestEnsureRedisCACertSecretBYOWithOverrideName(t *testing.T) {
 	})).Return(nil)
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
-	ensureSucceeded(t, gen.EnsureRedisCACertSecret(rf, nil, nil))
+	_, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	ensureSucceeded(t, err)
 	ms.AssertExpectations(t)
 
 	if !a.NotNil(got) {
@@ -886,4 +892,97 @@ func TestEnsureRedisCACertSecretBYOWithOverrideName(t *testing.T) {
 	}
 	a.Equal("my-ca-bundle", got.Name, "explicit caCertSecretName override must be honored in BYO mode")
 	a.Equal([]byte("BYO-CA"), got.Data["ca.crt"])
+}
+
+// tlsHashAnnotation pins the published annotation name; downstream tooling and
+// users read it, so a rename is a breaking change and must fail here.
+const tlsHashAnnotation = "redis-failover.freshworks.com/tls-secret-hash"
+
+// tlsHashFor drives the CA-publish path against a TLS secret with the given
+// contents and returns the hash it hands back for the pod templates.
+func tlsHashFor(t *testing.T, rf *redisfailoverv1.RedisFailover, data map[string][]byte) string {
+	t.Helper()
+
+	srcName := rfservice.GetTLSSecretName(rf)
+	ms := &mK8SService.Services{}
+	ms.On("GetSecret", rf.Namespace, srcName).Return(&corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: srcName, Namespace: rf.Namespace},
+		Data:       data,
+	}, nil)
+	ms.On("CreateOrUpdateSecret", rf.Namespace, mock.Anything).Return(nil).Maybe()
+
+	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
+	hash, err := gen.EnsureRedisCACertSecret(rf, nil, nil)
+	ensureSucceeded(t, err)
+	return hash
+}
+
+func TestTLSSecretHashStampedOnPodTemplates(t *testing.T) {
+	a := assert.New(t)
+	rf := generateTLSRF()
+	rf.Spec.Redis.PodAnnotations = map[string]string{"team": "db"}
+	rf.Spec.Sentinel.PodAnnotations = map[string]string{"team": "db"}
+
+	hash := tlsHashFor(t, rf, map[string][]byte{"tls.crt": []byte("LEAF"), "ca.crt": []byte("CA")})
+	a.NotEmpty(hash, "a populated TLS secret must yield a hash to pin the pods to")
+
+	sts := redisStatefulSetFor(t, rf, hash)
+	if a.NotNil(sts) {
+		a.Equal(hash, sts.Spec.Template.Annotations[tlsHashAnnotation],
+			"redis pod template must carry the TLS content hash")
+		a.Equal("db", sts.Spec.Template.Annotations["team"],
+			"stamping the hash must not drop the user's pod annotations")
+	}
+
+	deploy := sentinelDeploymentFor(t, rf, hash)
+	if a.NotNil(deploy) {
+		a.Equal(hash, deploy.Spec.Template.Annotations[tlsHashAnnotation],
+			"sentinel pod template must carry the TLS content hash")
+		a.Equal("db", deploy.Spec.Template.Annotations["team"],
+			"stamping the hash must not drop the user's pod annotations")
+	}
+
+	// The spec maps are the live objects from the informer cache; stamping
+	// must not write through to them.
+	a.NotContains(rf.Spec.Redis.PodAnnotations, tlsHashAnnotation)
+	a.NotContains(rf.Spec.Sentinel.PodAnnotations, tlsHashAnnotation)
+}
+
+func TestTLSSecretHashTracksSecretContent(t *testing.T) {
+	a := assert.New(t)
+	rf := generateTLSRF()
+
+	first := tlsHashFor(t, rf, map[string][]byte{"tls.crt": []byte("LEAF-1"), "ca.crt": []byte("CA-1")})
+	again := tlsHashFor(t, rf, map[string][]byte{"tls.crt": []byte("LEAF-1"), "ca.crt": []byte("CA-1")})
+	renewed := tlsHashFor(t, rf, map[string][]byte{"tls.crt": []byte("LEAF-2"), "ca.crt": []byte("CA-1")})
+	rotatedCA := tlsHashFor(t, rf, map[string][]byte{"tls.crt": []byte("LEAF-1"), "ca.crt": []byte("CA-2")})
+
+	a.Equal(first, again, "unchanged TLS material must not roll the pods")
+	a.NotEqual(first, renewed, "a renewed certificate must change the hash")
+	a.NotEqual(first, rotatedCA,
+		"a rotated CA must change the hash: redis loads ca.crt once at startup")
+
+	empty := tlsHashFor(t, rf, map[string][]byte{"ca.crt": []byte("CA-1")})
+	a.Empty(empty, "with no tls.crt there is nothing to pin the pods to yet")
+}
+
+func TestTLSSecretHashAbsentWhenTLSDisabled(t *testing.T) {
+	a := assert.New(t)
+	rf := generateRF()
+	rf.Spec.Redis.PodAnnotations = map[string]string{"team": "db"}
+	rf.Spec.Sentinel.PodAnnotations = map[string]string{"team": "db"}
+
+	sts := redisStatefulSetFor(t, rf, "")
+	if a.NotNil(sts) {
+		a.NotContains(sts.Spec.Template.Annotations, tlsHashAnnotation,
+			"no TLS means no hash annotation on the redis pod template")
+		a.Equal("db", sts.Spec.Template.Annotations["team"])
+	}
+
+	deploy := sentinelDeploymentFor(t, rf, "")
+	if a.NotNil(deploy) {
+		a.NotContains(deploy.Spec.Template.Annotations, tlsHashAnnotation,
+			"no TLS means no hash annotation on the sentinel pod template")
+		a.Equal("db", deploy.Spec.Template.Annotations["team"])
+	}
 }

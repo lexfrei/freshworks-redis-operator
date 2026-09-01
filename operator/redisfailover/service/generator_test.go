@@ -539,7 +539,7 @@ func TestRedisStatefulSetStorageGeneration(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, test.ownerRefs)
+		err := client.EnsureRedisStatefulset(rf, nil, test.ownerRefs, "")
 
 		// Check that the storage-related fields are as expected
 		assert.Equal(test.expectedSS.Spec.Template.Spec.Volumes, generatedStatefulSet.Spec.Template.Spec.Volumes)
@@ -594,7 +594,7 @@ func TestRedisStatefulSetCommands(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedCommands, gotCommands)
 		assert.NoError(err)
@@ -647,7 +647,7 @@ func TestSentinelDeploymentCommands(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedCommands, gotCommands)
 		assert.NoError(err)
@@ -696,7 +696,7 @@ func TestRedisStatefulSetPodAnnotations(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedPodAnnotations, gotPodAnnotations)
 		assert.NoError(err)
@@ -745,7 +745,7 @@ func TestSentinelDeploymentPodAnnotations(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedPodAnnotations, gotPodAnnotations)
 		assert.NoError(err)
@@ -788,7 +788,7 @@ func TestRedisStatefulSetServiceAccountName(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedServiceAccountName, gotServiceAccountName)
 		assert.NoError(err)
@@ -831,7 +831,7 @@ func TestSentinelDeploymentServiceAccountName(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.Equal(test.expectedServiceAccountName, gotServiceAccountName)
 		assert.NoError(err)
@@ -1826,7 +1826,7 @@ func TestRedisHostNetworkAndDnsPolicy(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 		assert.NoError(err)
 
 		assert.Equal(test.expectedHostNetwork, actualHostNetwork)
@@ -1876,7 +1876,7 @@ func TestSentinelHostNetworkAndDnsPolicy(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 		assert.NoError(err)
 
 		assert.Equal(test.expectedHostNetwork, actualHostNetwork)
@@ -1927,7 +1927,7 @@ func TestRedisImagePullPolicy(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(string(test.expectedPolicy), string(policy))
@@ -1974,7 +1974,7 @@ func TestSentinelImagePullPolicy(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(string(test.expectedPolicy), string(policy))
@@ -2050,7 +2050,7 @@ func TestRedisExtraVolumeMounts(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedVolumes[0], extraVolume)
@@ -2126,7 +2126,7 @@ func TestSentinelExtraVolumeMounts(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedVolumes[0], extraVolume)
@@ -2183,7 +2183,7 @@ func TestCustomPort(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedContainerPort[0], port)
@@ -2266,7 +2266,7 @@ func TestRedisEnv(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedRedisEnv, env)
@@ -2319,7 +2319,7 @@ func TestRedisStartupProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Contains(startupVolumes, test.expectedVolume)
@@ -2373,7 +2373,7 @@ func TestSentinelStartupProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Contains(startupVolumes, test.expectedVolume)
@@ -2457,7 +2457,7 @@ func TestRedisCustomLivenessProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedLivenessProbe, livenessProbe)
@@ -2537,7 +2537,7 @@ func TestSentinelCustomLivenessProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedLivenessProbe, livenessProbe)
@@ -2605,7 +2605,7 @@ func TestRedisCustomReadinessProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedReadinessProbe, readinessProbe)
@@ -2685,7 +2685,7 @@ func TestSentinelCustomReadinessProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedReadinessProbe, readinessProbe)
@@ -2745,7 +2745,7 @@ func TestRedisCustomStartupProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureRedisStatefulset(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedStartupProbe, startupProbe)
@@ -2813,7 +2813,7 @@ func TestSentinelCustomStartupProbe(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 
 		assert.NoError(err)
 		assert.Equal(test.expectedStartupProbe, startupProbe)
@@ -2901,7 +2901,7 @@ func TestDisableMyMaster(t *testing.T) {
 		}).Return(nil)
 
 		client := rfservice.NewRedisFailoverKubeClient(ms, log.Dummy, metrics.Dummy, "cluster.local")
-		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{})
+		err := client.EnsureSentinelDeployment(rf, nil, []metav1.OwnerReference{}, "")
 		assert.NoError(err)
 		assert.Equal(test.expectedSentinelReadinessProbe, sentinelReadinessProbe)
 

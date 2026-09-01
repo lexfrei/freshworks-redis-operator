@@ -45,6 +45,15 @@ const (
 	tlsSecretKey   = "tls.crt"
 	tlsSecretCAKey = "ca.crt"
 
+	// tlsSecretHashAnnotation carries a content hash of the mounted TLS
+	// Secret on the Redis and Sentinel pod templates. Redis loads the
+	// certificate files once at startup and never re-reads them, so a
+	// renewed Secret reaches the running server only if its pod restarts.
+	// Changing this annotation changes the pod template, which is what
+	// makes the StatefulSet publish a new updateRevision and the Sentinel
+	// Deployment roll.
+	tlsSecretHashAnnotation = "redis-failover.freshworks.com/tls-secret-hash"
+
 	// tlsVolumeMode keeps the private key off the world-readable bits the
 	// kubelet would otherwise apply. It is only safe when the pod declares
 	// an fsGroup; see tlsVolume.
