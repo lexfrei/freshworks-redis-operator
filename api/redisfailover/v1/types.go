@@ -33,6 +33,7 @@ type RedisFailover struct {
 }
 
 // RedisFailoverSpec represents a Redis failover spec
+// +kubebuilder:validation:XValidation:rule="(has(self.tls) && has(self.tls.enabled) && self.tls.enabled) == (has(oldSelf.tls) && has(oldSelf.tls.enabled) && oldSelf.tls.enabled)",message="TLS cannot be enabled or disabled on an existing RedisFailover; create a new one"
 type RedisFailoverSpec struct {
 	// Engine selects Redis or Valkey. Omitted or empty means Redis (historical behavior).
 	// +optional
@@ -58,10 +59,18 @@ const (
 // be set. The resulting Kubernetes Secret must contain the standard cert-manager
 // keys (tls.crt, tls.key, ca.crt) and is mounted read-only into both Redis and
 // Sentinel pods at /tls.
+//
+// TLS is chosen when the RedisFailover is created and cannot be turned on or
+// off afterwards. Redis replication and Sentinel cannot straddle two wire
+// protocols: a replica restarted onto the other protocol cannot sync from the
+// master, and Sentinels restarted onto it declare the master down and fail
+// over to such a replica while the master still serves writes. The other
+// fields stay mutable; a renewed certificate reaches the pods through a
+// restart.
 type TLSSettings struct {
-	// Enabled toggles TLS. Disabling TLS clears any provisioning fields:
-	// the operator does not delete a CertManager-created Certificate when
-	// switching back to plain TCP. Leaving Enabled=false is the default.
+	// Enabled toggles TLS. Immutable after creation, together with the
+	// presence of this block: a missing block and Enabled=false are the same
+	// state. Leaving Enabled=false is the default.
 	Enabled bool `json:"enabled,omitempty"`
 
 	// AuthClients maps to the Redis tls-auth-clients directive.
