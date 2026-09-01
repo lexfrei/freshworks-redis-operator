@@ -320,10 +320,12 @@ func (r *RedisFailoverKubeClient) EnsureRedisCertificate(rf *redisfailoverv1.Red
 // republishes the CA certificate once it becomes available.
 //
 // It also returns a content hash of the TLS secret it read, for the caller to
-// stamp on the Redis and Sentinel pod templates. This is the operator's only
-// read of that secret per reconcile, so the hash is derived here rather than
-// from a second GET. The hash is empty whenever there is nothing to pin yet:
-// TLS disabled, secret absent, or no tls.crt in it.
+// stamp on the Redis and Sentinel pod templates. This is the only read of
+// that secret in the Ensure phase, so the hash is derived here rather than
+// from a second GET there; the check-and-heal phase reads it again for every
+// Redis or Sentinel client it builds, see tlsConfigFor. The hash is empty
+// whenever there is nothing to pin yet: TLS disabled, secret absent, or no
+// tls.crt in it.
 func (r *RedisFailoverKubeClient) EnsureRedisCACertSecret(rf *redisfailoverv1.RedisFailover, labels map[string]string, ownerRefs []metav1.OwnerReference) (string, error) {
 	if !TLSEnabled(rf) {
 		return "", nil
