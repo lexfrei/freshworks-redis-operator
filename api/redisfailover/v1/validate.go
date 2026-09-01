@@ -127,6 +127,15 @@ func (r *RedisFailover) validateTLS() error {
 		return errors.New("tls.certificateSecret.secretName is required")
 	}
 
+	// The operator writes the CA-only Secret unconditionally. Pointing it at
+	// the Secret that carries the certificate and key would replace that
+	// material with a Secret holding nothing but ca.crt, leaving the cluster
+	// without a serving certificate.
+	if tls.CACertSecretName != "" && tls.CACertSecretName == r.TLSSecretName() {
+		return fmt.Errorf("tls.caCertSecretName %q must differ from the Secret holding the certificate and key, "+
+			"otherwise the CA-only Secret the operator publishes overwrites it", tls.CACertSecretName)
+	}
+
 	return nil
 }
 

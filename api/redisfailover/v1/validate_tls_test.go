@@ -107,6 +107,47 @@ func TestValidateTLS(t *testing.T) {
 			},
 			expectedAuth: TLSAuthClientsYes,
 		},
+		{
+			name: "caCertSecretName equal to the bring-your-own secret rejected",
+			tls: &TLSSettings{
+				Enabled:           true,
+				CertificateSecret: &LocalSecretReference{SecretName: "my-tls"},
+				CACertSecretName:  "my-tls",
+			},
+			expectedError: `tls.caCertSecretName "my-tls" must differ from the Secret holding the certificate and key`,
+		},
+		{
+			name: "caCertSecretName equal to the certManager secretName rejected",
+			tls: &TLSSettings{
+				Enabled: true,
+				CertManager: &CertManagerSettings{
+					IssuerRef:  cmmeta.ObjectReference{Name: "my-ca"},
+					SecretName: "cm-tls",
+				},
+				CACertSecretName: "cm-tls",
+			},
+			expectedError: `tls.caCertSecretName "cm-tls" must differ from the Secret holding the certificate and key`,
+		},
+		{
+			name: "caCertSecretName equal to the generated certManager secret rejected",
+			tls: &TLSSettings{
+				Enabled: true,
+				CertManager: &CertManagerSettings{
+					IssuerRef: cmmeta.ObjectReference{Name: "my-ca"},
+				},
+				CACertSecretName: "rftls-test-tls",
+			},
+			expectedError: `tls.caCertSecretName "rftls-test-tls" must differ from the Secret holding the certificate and key`,
+		},
+		{
+			name: "caCertSecretName distinct from the TLS secret is accepted",
+			tls: &TLSSettings{
+				Enabled:           true,
+				CertificateSecret: &LocalSecretReference{SecretName: "my-tls"},
+				CACertSecretName:  "my-tls-ca",
+			},
+			expectedAuth: TLSAuthClientsNo,
+		},
 	}
 
 	for _, test := range tests {

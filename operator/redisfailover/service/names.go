@@ -48,28 +48,11 @@ func GetTLSCertificateName(rf *redisfailoverv1.RedisFailover) string {
 	return generateName(tlsCertificateName, rf.Name)
 }
 
-// GetTLSSecretName returns the Secret name that holds the TLS material
-// for the cluster. It honors an explicit override when set; otherwise
-// it derives from the failover name.
-//
-// Precedence:
-//  1. spec.tls.certificateSecret.secretName (bring-your-own-secret mode)
-//  2. spec.tls.certManager.secretName       (cert-manager override)
-//  3. <generated default>                   (cert-manager managed)
-//
-// Returns the empty string when TLS is disabled or unconfigured.
+// GetTLSSecretName returns the Secret name that holds the TLS material for
+// the cluster. The derivation lives on the API type because validation needs
+// it too; see RedisFailover.TLSSecretName for the precedence rules.
 func GetTLSSecretName(rf *redisfailoverv1.RedisFailover) string {
-	tls := rf.Spec.TLS
-	if tls == nil || !tls.Enabled {
-		return ""
-	}
-	if tls.CertificateSecret != nil && tls.CertificateSecret.SecretName != "" {
-		return tls.CertificateSecret.SecretName
-	}
-	if tls.CertManager != nil && tls.CertManager.SecretName != "" {
-		return tls.CertManager.SecretName
-	}
-	return generateName(tlsCertificateName, rf.Name)
+	return rf.TLSSecretName()
 }
 
 // GetTLSCACertSecretName returns the name of the Opaque Secret the operator
