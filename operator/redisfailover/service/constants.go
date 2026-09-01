@@ -44,6 +44,11 @@ const (
 	tlsCAFile      = tlsMountPath + "/ca.crt"
 	tlsSecretKey   = "tls.crt"
 	tlsSecretCAKey = "ca.crt"
+
+	// tlsVolumeMode keeps the private key off the world-readable bits the
+	// kubelet would otherwise apply. It is only safe when the pod declares
+	// an fsGroup; see tlsVolume.
+	tlsVolumeMode = int32(0440)
 )
 
 const (

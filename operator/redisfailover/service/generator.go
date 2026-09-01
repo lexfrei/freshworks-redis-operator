@@ -1145,8 +1145,19 @@ func tlsVolumeMount() corev1.VolumeMount {
 	}
 }
 
-func tlsVolume(secretName string) corev1.Volume {
-	return corev1.Volume{
+// tlsVolume builds the Secret volume carrying the certificate, its private
+// key and the CA bundle.
+//
+// The kubelet defaults secret files to 0644, which leaves the private key
+// readable by every uid in the pod — sidecars included, and those can be
+// given a securityContext of their own. Tightening the mode to 0440 relies
+// on the files being group-owned by a gid the containers run with, which is
+// what an fsGroup on the pod does; without one the kubelet leaves them owned
+// by root:root and 0440 would hide the key from any container running as
+// non-root. So the mode is only tightened when the pod declares an fsGroup,
+// and a caller-supplied securityContext without one keeps the default.
+func tlsVolume(secretName string, podSecurityContext *corev1.PodSecurityContext) corev1.Volume {
+	volume := corev1.Volume{
 		Name: tlsVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
@@ -1154,6 +1165,11 @@ func tlsVolume(secretName string) corev1.Volume {
 			},
 		},
 	}
+	if podSecurityContext != nil && podSecurityContext.FSGroup != nil {
+		mode := tlsVolumeMode
+		volume.VolumeSource.Secret.DefaultMode = &mode
+	}
+	return volume
 }
 
 func getRedisVolumes(rf *redisfailoverv1.RedisFailover) []corev1.Volume {
@@ -1214,7 +1230,7 @@ func getRedisVolumes(rf *redisfailoverv1.RedisFailover) []corev1.Volume {
 	}
 
 	if TLSEnabled(rf) {
-		volumes = append(volumes, tlsVolume(GetTLSSecretName(rf)))
+		volumes = append(volumes, tlsVolume(GetTLSSecretName(rf), getSecurityContext(rf.Spec.Redis.SecurityContext)))
 	}
 
 	if rf.Spec.Redis.ExtraVolumes != nil {
@@ -1268,7 +1284,7 @@ func getSentinelVolumes(rf *redisfailoverv1.RedisFailover, configMapName string)
 	}
 
 	if TLSEnabled(rf) {
-		volumes = append(volumes, tlsVolume(GetTLSSecretName(rf)))
+		volumes = append(volumes, tlsVolume(GetTLSSecretName(rf), getSecurityContext(rf.Spec.Sentinel.SecurityContext)))
 	}
 
 	if rf.Spec.Sentinel.ExtraVolumes != nil {

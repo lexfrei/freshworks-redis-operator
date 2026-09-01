@@ -116,6 +116,110 @@ func TestRedisStatefulSetHasTLSVolume(t *testing.T) {
 	a := assert.New(t)
 	rf := generateTLSRF()
 
+	got := redisStatefulSetFor(t, rf)
+	if !a.NotNil(got) {
+		return
+	}
+	expectedSecret := rfservice.GetTLSSecretName(rf)
+
+	// Volume present and points at the right secret.
+	tlsVol := findVolume(got.Spec.Template.Spec.Volumes, "redis-tls")
+	if a.NotNil(tlsVol, "redis-tls volume must be present") {
+		a.NotNil(tlsVol.Secret)
+		if tlsVol.Secret != nil {
+			a.Equal(expectedSecret, tlsVol.Secret.SecretName)
+			if a.NotNil(tlsVol.Secret.DefaultMode, "TLS secret must not fall back to the world-readable default mode") {
+				a.Equal(int32(0440), *tlsVol.Secret.DefaultMode,
+					"TLS secret files must be readable only by the owner and the pod fsGroup")
+			}
+		}
+	}
+
+	// Mount present on the redis container.
+	redisContainer := got.Spec.Template.Spec.Containers[0]
+	a.True(hasTLSMount(redisContainer.VolumeMounts),
+		"redis container must mount the TLS secret read-only at /tls")
+}
+
+func TestSentinelDeploymentHasTLSVolume(t *testing.T) {
+	a := assert.New(t)
+	rf := generateTLSRF()
+
+	got := sentinelDeploymentFor(t, rf)
+	if !a.NotNil(got) {
+		return
+	}
+
+	tlsVol := findVolume(got.Spec.Template.Spec.Volumes, "redis-tls")
+	if a.NotNil(tlsVol, "redis-tls volume must be present on the sentinel pod") {
+		a.NotNil(tlsVol.Secret)
+		if tlsVol.Secret != nil {
+			a.Equal(rfservice.GetTLSSecretName(rf), tlsVol.Secret.SecretName)
+			if a.NotNil(tlsVol.Secret.DefaultMode, "TLS secret must not fall back to the world-readable default mode") {
+				a.Equal(int32(0440), *tlsVol.Secret.DefaultMode,
+					"TLS secret files must be readable only by the owner and the pod fsGroup")
+			}
+		}
+	}
+
+	sentinelContainer := got.Spec.Template.Spec.Containers[0]
+	a.True(hasTLSMount(sentinelContainer.VolumeMounts),
+		"sentinel container must mount the TLS secret read-only at /tls")
+}
+
+// A pod securityContext supplied by the user replaces the operator's default
+// wholesale, so it may carry no fsGroup. Secret files are then owned by
+// root:root and 0440 would be unreadable by a container running as non-root,
+// so the mode must stay at the kubelet default in that case.
+func TestTLSVolumeKeepsDefaultModeWithoutFSGroup(t *testing.T) {
+	a := assert.New(t)
+	runAsUser := int64(1000)
+	noFSGroup := &corev1.PodSecurityContext{RunAsUser: &runAsUser}
+
+	rf := generateTLSRF()
+	rf.Spec.Redis.SecurityContext = noFSGroup
+	rf.Spec.Sentinel.SecurityContext = noFSGroup
+
+	sts := redisStatefulSetFor(t, rf)
+	if a.NotNil(sts) {
+		tlsVol := findVolume(sts.Spec.Template.Spec.Volumes, "redis-tls")
+		if a.NotNil(tlsVol) && a.NotNil(tlsVol.Secret) {
+			a.Nil(tlsVol.Secret.DefaultMode,
+				"without an fsGroup the redis TLS volume must keep the kubelet default mode")
+		}
+	}
+
+	deploy := sentinelDeploymentFor(t, rf)
+	if a.NotNil(deploy) {
+		tlsVol := findVolume(deploy.Spec.Template.Spec.Volumes, "redis-tls")
+		if a.NotNil(tlsVol) && a.NotNil(tlsVol.Secret) {
+			a.Nil(tlsVol.Secret.DefaultMode,
+				"without an fsGroup the sentinel TLS volume must keep the kubelet default mode")
+		}
+	}
+}
+
+func findVolume(volumes []corev1.Volume, name string) *corev1.Volume {
+	for i := range volumes {
+		if volumes[i].Name == name {
+			return &volumes[i]
+		}
+	}
+	return nil
+}
+
+func hasTLSMount(mounts []corev1.VolumeMount) bool {
+	for _, m := range mounts {
+		if m.Name == "redis-tls" && m.MountPath == "/tls" && m.ReadOnly {
+			return true
+		}
+	}
+	return false
+}
+
+func redisStatefulSetFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *appsv1.StatefulSet {
+	t.Helper()
+
 	var got *appsv1.StatefulSet
 	ms := &mK8SService.Services{}
 	ms.On("CreateOrUpdateStatefulSet", rf.Namespace, mock.MatchedBy(func(ss *appsv1.StatefulSet) bool {
@@ -127,38 +231,23 @@ func TestRedisStatefulSetHasTLSVolume(t *testing.T) {
 
 	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
 	ensureSucceeded(t, gen.EnsureRedisStatefulset(rf, nil, nil))
+	return got
+}
 
-	if !a.NotNil(got) {
-		return
-	}
-	expectedSecret := rfservice.GetTLSSecretName(rf)
+func sentinelDeploymentFor(t *testing.T, rf *redisfailoverv1.RedisFailover) *appsv1.Deployment {
+	t.Helper()
 
-	// Volume present and points at the right secret.
-	var tlsVol *corev1.Volume
-	for i := range got.Spec.Template.Spec.Volumes {
-		v := &got.Spec.Template.Spec.Volumes[i]
-		if v.Name == "redis-tls" {
-			tlsVol = v
-			break
-		}
-	}
-	if a.NotNil(tlsVol, "redis-tls volume must be present") {
-		a.NotNil(tlsVol.Secret)
-		if tlsVol.Secret != nil {
-			a.Equal(expectedSecret, tlsVol.Secret.SecretName)
-		}
-	}
+	var got *appsv1.Deployment
+	ms := &mK8SService.Services{}
+	ms.On("CreateOrUpdateDeployment", rf.Namespace, mock.MatchedBy(func(d *appsv1.Deployment) bool {
+		got = d
+		return true
+	})).Return(nil)
+	ms.On("CreateOrUpdatePodDisruptionBudget", rf.Namespace, mock.Anything).Return(nil).Maybe()
 
-	// Mount present on the redis container.
-	redisContainer := got.Spec.Template.Spec.Containers[0]
-	var found bool
-	for _, m := range redisContainer.VolumeMounts {
-		if m.Name == "redis-tls" && m.MountPath == "/tls" && m.ReadOnly {
-			found = true
-			break
-		}
-	}
-	a.True(found, "redis container must mount the TLS secret read-only at /tls")
+	gen := rfservice.NewRedisFailoverKubeClient(ms, log.DummyLogger{}, metrics.Dummy, "cluster.local")
+	ensureSucceeded(t, gen.EnsureSentinelDeployment(rf, nil, nil))
+	return got
 }
 
 func TestRedisExporterHasTLSEnv(t *testing.T) {
