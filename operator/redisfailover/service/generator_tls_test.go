@@ -986,3 +986,92 @@ func TestTLSSecretHashAbsentWhenTLSDisabled(t *testing.T) {
 		a.Equal("db", deploy.Spec.Template.Annotations["team"])
 	}
 }
+
+// TestPlaintextProbesKeepUpstreamCommands pins the probe commands rendered for
+// a failover without TLS to the exact strings v3.3.5 emits. Those strings are
+// part of the pod template, so any drift makes every running Redis StatefulSet
+// and Sentinel Deployment differ from its live spec and roll once on the first
+// reconcile after an operator upgrade — for users who never asked for TLS.
+func TestPlaintextProbesKeepUpstreamCommands(t *testing.T) {
+	tests := []struct {
+		name              string
+		mutate            func(*redisfailoverv1.RedisFailover)
+		redisLiveness     string
+		sentinelLiveness  string
+		sentinelReadiness string
+	}{
+		{
+			name:              "defaults",
+			mutate:            func(*redisfailoverv1.RedisFailover) {},
+			redisLiveness:     "redis-cli -h $(hostname) -p 6379 --user pinger --pass pingpass --no-auth-warning ping | grep PONG",
+			sentinelLiveness:  "redis-cli -h $(hostname) -p 26379 ping",
+			sentinelReadiness: "redis-cli -h $(hostname) -p 26379 sentinel get-master-addr-by-name mymaster | head -n 1 | grep -vq '127.0.0.1'",
+		},
+		{
+			name:              "custom redis port",
+			mutate:            func(rf *redisfailoverv1.RedisFailover) { rf.Spec.Redis.Port = 6380 },
+			redisLiveness:     "redis-cli -h $(hostname) -p 6380 --user pinger --pass pingpass --no-auth-warning ping | grep PONG",
+			sentinelLiveness:  "redis-cli -h $(hostname) -p 26379 ping",
+			sentinelReadiness: "redis-cli -h $(hostname) -p 26379 sentinel get-master-addr-by-name mymaster | head -n 1 | grep -vq '127.0.0.1'",
+		},
+		{
+			name:              "master name from the failover",
+			mutate:            func(rf *redisfailoverv1.RedisFailover) { rf.Spec.Sentinel.DisableMyMaster = true },
+			redisLiveness:     "redis-cli -h $(hostname) -p 6379 --user pinger --pass pingpass --no-auth-warning ping | grep PONG",
+			sentinelLiveness:  "redis-cli -h $(hostname) -p 26379 ping",
+			sentinelReadiness: "redis-cli -h $(hostname) -p 26379 sentinel get-master-addr-by-name test | head -n 1 | grep -vq '127.0.0.1'",
+		},
+		{
+			name:              "valkey engine",
+			mutate:            func(rf *redisfailoverv1.RedisFailover) { rf.Spec.Engine = redisfailoverv1.ValkeyEngine },
+			redisLiveness:     "valkey-cli -h $(hostname) -p 6379 --user pinger --pass pingpass --no-auth-warning ping | grep PONG",
+			sentinelLiveness:  "valkey-cli -h $(hostname) -p 26379 ping",
+			sentinelReadiness: "valkey-cli -h $(hostname) -p 26379 sentinel get-master-addr-by-name mymaster | head -n 1 | grep -vq '127.0.0.1'",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			rf := generateRF()
+			rf.Spec.Redis.Port = 6379
+			test.mutate(rf)
+			a.Nil(rf.Spec.TLS, "this test covers the failover that never opted into TLS")
+
+			ss := redisStatefulSetFor(t, rf, "")
+			sd := sentinelDeploymentFor(t, rf, "")
+			if !a.NotNil(ss) || !a.NotNil(sd) {
+				return
+			}
+
+			got := map[string]string{
+				"redis liveness":     execCommand(t, ss.Spec.Template.Spec.Containers[0].LivenessProbe),
+				"sentinel liveness":  execCommand(t, sd.Spec.Template.Spec.Containers[0].LivenessProbe),
+				"sentinel readiness": execCommand(t, sd.Spec.Template.Spec.Containers[0].ReadinessProbe),
+			}
+			a.Equal(test.redisLiveness, got["redis liveness"])
+			a.Equal(test.sentinelLiveness, got["sentinel liveness"])
+			a.Equal(test.sentinelReadiness, got["sentinel readiness"])
+
+			for probe, cmd := range got {
+				a.NotContains(cmd, "localhost",
+					"%s dials $(hostname) without TLS; localhost is only needed to match a certificate SAN", probe)
+				a.NotContains(cmd, "--tls", "%s must not carry TLS flags when TLS is off", probe)
+			}
+		})
+	}
+}
+
+// execCommand returns the shell script of a probe, after checking it is still
+// wrapped in the "sh -c" form the expectations are written against.
+func execCommand(t *testing.T, probe *corev1.Probe) string {
+	t.Helper()
+	if probe == nil || probe.Exec == nil {
+		t.Fatal("probe has no exec command")
+	}
+	cmd := probe.Exec.Command
+	if len(cmd) != 3 || cmd[0] != "sh" || cmd[1] != "-c" {
+		t.Fatalf("probe command is not an sh -c script: %q", cmd)
+	}
+	return cmd[2]
+}

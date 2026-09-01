@@ -89,6 +89,20 @@ var redisTemplateFuncs = template.FuncMap{
 	"tlsEnabled": TLSEnabled,
 }
 
+// probeHost is the host the in-pod liveness and readiness probes dial.
+//
+// Plaintext keeps the "$(hostname)" form the operator has always emitted, so
+// that upgrading the operator does not rewrite the pod template of a failover
+// whose spec did not change. Under TLS the probes have to dial "localhost":
+// the bare pod hostname is not in the certificate's SAN list, while localhost
+// and the loopback addresses are.
+func probeHost(rf *redisfailoverv1.RedisFailover) string {
+	if TLSEnabled(rf) {
+		return "localhost"
+	}
+	return "$(hostname)"
+}
+
 // redisCLITLSFlags returns the trailing space-suffixed flag block that
 // every redis-cli invocation in the pod scripts needs when TLS is on.
 // Returns an empty string when TLS is disabled so the scripts stay
@@ -675,7 +689,7 @@ func generateRedisStatefulSet(rf *redisfailoverv1.RedisFailover, labels map[stri
 					Command: []string{
 						"sh",
 						"-c",
-						fmt.Sprintf("%s %s-h localhost -p %v --user pinger --pass pingpass --no-auth-warning ping | grep PONG", eng.CLIBinary(), redisCLITLSFlags(rf), rf.Spec.Redis.Port),
+						fmt.Sprintf("%s %s-h %s -p %v --user pinger --pass pingpass --no-auth-warning ping | grep PONG", eng.CLIBinary(), redisCLITLSFlags(rf), probeHost(rf), rf.Spec.Redis.Port),
 					},
 				},
 			},
@@ -842,7 +856,7 @@ func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[st
 					Command: []string{
 						"sh",
 						"-c",
-						fmt.Sprintf("%s %s-h localhost -p 26379 ping", eng.CLIBinary(), redisCLITLSFlags(rf)),
+						fmt.Sprintf("%s %s-h %s -p 26379 ping", eng.CLIBinary(), redisCLITLSFlags(rf), probeHost(rf)),
 					},
 				},
 			},
@@ -852,7 +866,7 @@ func generateSentinelDeployment(rf *redisfailoverv1.RedisFailover, labels map[st
 	if rf.Spec.Sentinel.CustomReadinessProbe != nil {
 		sd.Spec.Template.Spec.Containers[0].ReadinessProbe = rf.Spec.Sentinel.CustomReadinessProbe
 	} else {
-		probeCommand := fmt.Sprintf("%s %s-h localhost -p 26379 sentinel get-master-addr-by-name %s | head -n 1 | grep -vq '127.0.0.1'", eng.CLIBinary(), redisCLITLSFlags(rf), rf.MasterName())
+		probeCommand := fmt.Sprintf("%s %s-h %s -p 26379 sentinel get-master-addr-by-name %s | head -n 1 | grep -vq '127.0.0.1'", eng.CLIBinary(), redisCLITLSFlags(rf), probeHost(rf), rf.MasterName())
 		sd.Spec.Template.Spec.Containers[0].ReadinessProbe = &corev1.Probe{
 			InitialDelaySeconds: graceTime,
 			TimeoutSeconds:      5,
