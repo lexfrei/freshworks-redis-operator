@@ -93,9 +93,9 @@ var redisTemplateFuncs = template.FuncMap{
 //
 // Plaintext keeps the "$(hostname)" form the operator has always emitted, so
 // that upgrading the operator does not rewrite the pod template of a failover
-// whose spec did not change. Under TLS the probes have to dial "localhost":
-// the bare pod hostname is not in the certificate's SAN list, while localhost
-// and the loopback addresses are.
+// whose spec did not change. Under TLS the probes dial "localhost", which is
+// a SAN entry on the generated certificate along with the loopback addresses;
+// the bare pod hostname is not.
 func probeHost(rf *redisfailoverv1.RedisFailover) string {
 	if TLSEnabled(rf) {
 		return "localhost"

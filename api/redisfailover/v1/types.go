@@ -107,7 +107,7 @@ type CertManagerSettings struct {
 	// "cert-manager.io" when empty.
 	IssuerRef cmmeta.ObjectReference `json:"issuerRef"`
 
-	// SecretName overrides the default Secret name (<rfname>-tls) into
+	// SecretName overrides the default Secret name (rftls-<rfname>) into
 	// which cert-manager writes the issued certificate.
 	SecretName string `json:"secretName,omitempty"`
 
