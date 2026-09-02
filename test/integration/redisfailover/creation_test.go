@@ -45,7 +45,7 @@ const (
 	authSecretPath          = "redis-auth"
 	testPass                = "test-pass"
 	redisAddr               = "redis://127.0.0.1:6379"
-	integrationTestGroupID   = "integration-test"
+	integrationTestGroupID  = "integration-test"
 	rfOperatorGroupLabelKey = "redis-failover.freshworks.com/operator-group"
 )
 
