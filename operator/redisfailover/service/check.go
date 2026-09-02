@@ -22,7 +22,9 @@ import (
 // the operator uses to dial Redis and Sentinel pods. Returns (nil, nil)
 // when spec.tls.enabled is false, which is the signal callers feed to
 // the redis client to dial plaintext. ServerName is set to the redis
-// headless service name so the certificate's SAN list matches.
+// headless service name so the certificate's SAN list matches. The
+// operator's own client certificate is presented whenever the Secret
+// carries both tls.crt and tls.key, independently of spec.tls.authClients.
 func tlsConfigFor(s k8s.Services, rf *redisfailoverv1.RedisFailover) (*tls.Config, error) {
 	if !TLSEnabled(rf) {
 		return nil, nil
@@ -39,23 +41,19 @@ func tlsConfigFor(s k8s.Services, rf *redisfailoverv1.RedisFailover) (*tls.Confi
 	if len(caPEM) == 0 {
 		return nil, fmt.Errorf("tls: secret %s/%s contains an empty ca.crt", rf.Namespace, secretName)
 	}
-	// When the failover runs with tls-auth-clients yes, Redis and
-	// Sentinel reject any client that does not present a certificate
-	// signed by the same CA. Load the leaf certificate and its key
-	// from the standard cert-manager secret keys so the operator's
-	// internal client can authenticate itself.
-	var certPEM, keyPEM []byte
-	if rf.Spec.TLS.AuthClients == redisfailoverv1.TLSAuthClientsYes {
-		certPEM = secret.Data["tls.crt"]
-		if len(certPEM) == 0 {
-			return nil, fmt.Errorf("tls: secret %s/%s does not contain tls.crt (required for authClients=%s)",
-				rf.Namespace, secretName, redisfailoverv1.TLSAuthClientsYes)
-		}
-		keyPEM = secret.Data["tls.key"]
-		if len(keyPEM) == 0 {
-			return nil, fmt.Errorf("tls: secret %s/%s does not contain tls.key (required for authClients=%s)",
-				rf.Namespace, secretName, redisfailoverv1.TLSAuthClientsYes)
-		}
+	// Redis and Sentinel reject a client that presents no certificate
+	// while tls-auth-clients is yes. That directive is mutable and the
+	// pods keep enforcing the value they booted with until they roll, so
+	// a spec currently reading no is no evidence that the server will
+	// not ask. Present the pair whenever the Secret carries one:
+	// offering a certificate to a server that does not want it costs
+	// nothing, withholding it from a server that does locks the operator
+	// out of its own instance. A Secret without both halves yields no
+	// client certificate.
+	certPEM := secret.Data["tls.crt"]
+	keyPEM := secret.Data["tls.key"]
+	if len(certPEM) == 0 || len(keyPEM) == 0 {
+		certPEM, keyPEM = nil, nil
 	}
 	return redis.BuildTLSConfig(caPEM, certPEM, keyPEM, GetRedisName(rf))
 }
