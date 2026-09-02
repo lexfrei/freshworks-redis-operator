@@ -46,9 +46,11 @@ const (
 	tlsSecretCAKey = "ca.crt"
 
 	// tlsSecretHashAnnotation carries a content hash of the mounted TLS
-	// Secret on the Redis and Sentinel pod templates. Redis loads the
-	// certificate files once at startup and never re-reads them, so a
-	// renewed Secret reaches the running server only if its pod restarts.
+	// Secret and of the tls-auth-clients directive on the Redis and
+	// Sentinel pod templates. Redis loads the certificate files and its
+	// config once at startup and never re-reads them, so a renewed Secret
+	// or a changed directive reaches the running server only if its pod
+	// restarts.
 	// Changing this annotation changes the pod template, which is what
 	// makes the StatefulSet publish a new updateRevision and the Sentinel
 	// Deployment roll.

@@ -74,6 +74,17 @@ func TLSEnabled(rf *redisfailoverv1.RedisFailover) bool {
 	return rf.Spec.TLS != nil && rf.Spec.TLS.Enabled
 }
 
+// tlsAuthClients returns the effective tls-auth-clients value: the spec field,
+// or the "no" the API defaulting fills in for an empty one. The two spellings
+// describe the same server, so anything derived from this value must not tell
+// them apart.
+func tlsAuthClients(rf *redisfailoverv1.RedisFailover) string {
+	if !TLSEnabled(rf) || rf.Spec.TLS.AuthClients == "" {
+		return redisfailoverv1.TLSAuthClientsNo
+	}
+	return rf.Spec.TLS.AuthClients
+}
+
 func generateName(typeName, metaName string) string {
 	return fmt.Sprintf("%s%s-%s", baseName, typeName, metaName)
 }

@@ -196,14 +196,20 @@ func generateRedisCACertSecret(rf *redisfailoverv1.RedisFailover, labels map[str
 }
 
 // tlsSecretContentHash returns a content hash of the TLS material the pods
-// mount, or the empty string when there is no certificate to pin yet.
+// mount and of the tls-auth-clients directive they run with, or the empty
+// string when there is no certificate to pin yet.
 //
 // Both tls.crt and ca.crt are covered. Redis loads the certificate and the CA
 // bundle at startup and re-reads neither, so a change to either one only
 // reaches the server by restarting the pod. tls.key is left out: cert-manager
 // rotates it together with tls.crt, and there is no reason to derive a
 // published annotation value from private key material.
-func tlsSecretContentHash(secret *corev1.Secret) string {
+//
+// tls-auth-clients is covered for the same reason. It is a mutable spec field
+// whose only carrier is the generated config file, which Redis also reads once
+// at startup, so without it in the hash a change is admitted and then lands
+// pod by pod at whatever unrelated restart comes next.
+func tlsSecretContentHash(rf *redisfailoverv1.RedisFailover, secret *corev1.Secret) string {
 	if secret == nil || len(secret.Data[tlsSecretKey]) == 0 {
 		return ""
 	}
@@ -215,6 +221,9 @@ func tlsSecretContentHash(secret *corev1.Secret) string {
 		h.Write([]byte(key + ":" + strconv.Itoa(len(value)) + ":"))
 		h.Write(value)
 	}
+	authClients := tlsAuthClients(rf)
+	h.Write([]byte("authClients:" + strconv.Itoa(len(authClients)) + ":"))
+	h.Write([]byte(authClients))
 	return hex.EncodeToString(h.Sum(nil))
 }
 

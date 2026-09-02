@@ -966,6 +966,38 @@ func TestTLSSecretHashTracksSecretContent(t *testing.T) {
 	a.Empty(empty, "with no tls.crt there is nothing to pin the pods to yet")
 }
 
+// TestTLSSecretHashTracksAuthClients pins the roll behaviour of
+// spec.tls.authClients. The directive reaches a running server only through
+// the generated config file, which Redis reads once at startup, and the Redis
+// StatefulSet rolls OnDelete. Left out of the pod template, a change to it is
+// admitted and then lands pod by pod at whatever unrelated restart comes next
+// — a node drain, an OOM, or the renewal roll months later.
+func TestTLSSecretHashTracksAuthClients(t *testing.T) {
+	a := assert.New(t)
+	data := map[string][]byte{"tls.crt": []byte("LEAF"), "ca.crt": []byte("CA")}
+
+	hashFor := func(authClients string) string {
+		rf := generateTLSRF()
+		rf.Spec.TLS.AuthClients = authClients
+		return tlsHashFor(t, rf, data)
+	}
+
+	no := hashFor(redisfailoverv1.TLSAuthClientsNo)
+	optional := hashFor(redisfailoverv1.TLSAuthClientsOptional)
+	yes := hashFor(redisfailoverv1.TLSAuthClientsYes)
+
+	a.Equal(no, hashFor(redisfailoverv1.TLSAuthClientsNo),
+		"an unchanged directive must not roll the pods")
+	a.Equal(no, hashFor(""),
+		"an unset directive defaults to no, so both spellings must hash alike")
+	a.NotEqual(no, yes,
+		"demanding client certificates must roll the pods that enforce it")
+	a.NotEqual(no, optional,
+		"accepting client certificates must roll the pods that enforce it")
+	a.NotEqual(optional, yes,
+		"optional and yes are different servers and must not hash alike")
+}
+
 func TestTLSSecretHashAbsentWhenTLSDisabled(t *testing.T) {
 	a := assert.New(t)
 	rf := generateRF()

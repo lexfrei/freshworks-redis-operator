@@ -319,8 +319,9 @@ func (r *RedisFailoverKubeClient) EnsureRedisCertificate(rf *redisfailoverv1.Red
 // returns nil so the rest of the reconcile proceeds and a later pass
 // republishes the CA certificate once it becomes available.
 //
-// It also returns a content hash of the TLS secret it read, for the caller to
-// stamp on the Redis and Sentinel pod templates. This is the only read of
+// It also returns a content hash of the TLS secret it read, folded together
+// with the effective tls-auth-clients value, for the caller to stamp on the
+// Redis and Sentinel pod templates. This is the only read of
 // that secret in the Ensure phase, so the hash is derived here rather than
 // from a second GET there; the check-and-heal phase reads it again for every
 // Redis or Sentinel client it builds, see tlsConfigFor. The hash is empty
@@ -342,7 +343,7 @@ func (r *RedisFailoverKubeClient) EnsureRedisCACertSecret(rf *redisfailoverv1.Re
 	}
 	// Taken before the ca.crt check below, so that a secret carrying a
 	// serving certificate but no CA yet still pins the pods to it.
-	tlsHash := tlsSecretContentHash(src)
+	tlsHash := tlsSecretContentHash(rf, src)
 	caPEM := src.Data[tlsSecretCAKey]
 	if len(caPEM) == 0 {
 		r.logger.WithField("namespace", rf.Namespace).WithField("secret", srcName).

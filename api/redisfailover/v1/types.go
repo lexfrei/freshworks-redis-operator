@@ -76,6 +76,8 @@ type TLSSettings struct {
 	// AuthClients maps to the Redis tls-auth-clients directive.
 	// One of "no", "optional", "yes". Defaults to "no" — server certificate
 	// is presented but client certificates are not validated.
+	// Changing it rolls the Redis and Sentinel pods, because the directive
+	// is read from the config file once at startup.
 	// +kubebuilder:validation:Enum=no;optional;yes
 	AuthClients string `json:"authClients,omitempty"`
 
